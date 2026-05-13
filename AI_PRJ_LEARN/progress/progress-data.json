@@ -2,9 +2,12 @@
   "weeks": {
     "week1": {
       "status": "not_started",
-      "startDate": "",
+      "startDate": "2026-05-08",
       "endDate": "",
-      "notes": "",
+      "notes": "基础知识继续学习",
+      "notesEntries": [
+        "异常掌握"
+      ],
       "details": {
         "Python 开发基础": {
           "掌握语法、数据结构、函数和类": true,
@@ -14,7 +17,7 @@
         "环境与协作": {
           "会创建 venv 并安装依赖": false,
           "理解 requirements.txt 的作用": false,
-          "会用 Git 做分支开发和提交": false
+          "会用 Git 做分支开发和提交": true
         },
         "HTTP 与 API": {
           "理解 GET/POST 和常见状态码": false,
@@ -33,6 +36,7 @@
       "startDate": "",
       "endDate": "",
       "notes": "",
+      "notesEntries": [],
       "details": {
         "ML 基础概念": {
           "理解监督学习、分类和回归": false,
@@ -61,6 +65,7 @@
       "startDate": "",
       "endDate": "",
       "notes": "",
+      "notesEntries": [],
       "details": {
         "训练流程理解": {
           "理解前向传播、损失函数、反向传播": false,
@@ -89,6 +94,7 @@
       "startDate": "",
       "endDate": "",
       "notes": "",
+      "notesEntries": [],
       "details": {
         "Transformer 理解": {
           "理解 attention 的基本作用": false,
@@ -117,6 +123,7 @@
       "startDate": "",
       "endDate": "",
       "notes": "",
+      "notesEntries": [],
       "details": {
         "RAG 流程": {
           "理解检索增强生成整体流程": false,
@@ -145,6 +152,7 @@
       "startDate": "",
       "endDate": "",
       "notes": "",
+      "notesEntries": [],
       "details": {
         "服务化": {
           "把推理脚本封装成 API": false,
@@ -173,6 +181,7 @@
       "startDate": "",
       "endDate": "",
       "notes": "",
+      "notesEntries": [],
       "details": {
         "Agent 结构": {
           "理解 planner、executor、tool、memory": false,
@@ -201,6 +210,7 @@
       "startDate": "",
       "endDate": "",
       "notes": "",
+      "notesEntries": [],
       "details": {
         "项目整理": {
           "整理目录结构和依赖": false,
@@ -240,5 +250,5 @@
     }
   },
   "weeklySummary": "",
-  "lastSaved": "2026/5/8 10:46:01"
+  "lastSaved": "2026/5/13 18:40:01"
 }

@@ -164,6 +164,20 @@
       min-height: 92px;
     }
 
+    /* 备注列表样式 */
+    .notes-preview { display: flex; flex-direction: column; gap:8px; }
+    .notes-preview button { align-self: flex-start; }
+    .notes-list { list-style: disc; margin: 0; padding-left: 18px; max-height: 120px; overflow: auto; }
+    .notes-list li { font-size: 13px; color: var(--sub); margin-bottom:6px; }
+
+    /* 备注 Modal */
+    .modal-backdrop { display:none; position:fixed; inset:0; background: rgba(0,0,0,0.4); z-index:9998; }
+    .modal { display:none; position:fixed; z-index:9999; left:50%; top:50%; transform:translate(-50%,-50%); width:80%; max-width:900px; background:#fff; border-radius:12px; box-shadow: var(--shadow); }
+    .modal-header { padding:12px 16px; border-bottom:1px solid var(--line); font-weight:600; }
+    .modal-body { padding:16px; }
+    .modal-actions { padding:12px 16px; border-top:1px solid var(--line); display:flex; gap:8px; justify-content:flex-end; }
+    .modal textarea { width:100%; height:200px; }
+
     .status-badge {
       display: inline-block;
       padding: 4px 10px;
@@ -510,7 +524,9 @@
             status: "not_started",
             startDate: "",
             endDate: "",
+            // notes: legacy single-string note, notesEntries: list of individual remark entries
             notes: "",
+            notesEntries: [],
             details: buildDetailState(item)
           };
           return acc;
@@ -533,11 +549,17 @@
 
         weeks.forEach((week) => {
           const savedWeek = (parsed.weeks && parsed.weeks[week.id]) || {};
-          base.weeks[week.id] = {
-            ...base.weeks[week.id],
-            ...savedWeek,
-            details: buildDetailState(week)
-          };
+          // migrate notes -> notesEntries if needed
+          const migrated = { ...base.weeks[week.id], ...savedWeek, details: buildDetailState(week) };
+          if (!migrated.notesEntries) {
+            // if legacy notes string exists, convert to single entry
+            if (migrated.notes && typeof migrated.notes === 'string' && migrated.notes.trim()) {
+              migrated.notesEntries = [migrated.notes];
+            } else {
+              migrated.notesEntries = [];
+            }
+          }
+          base.weeks[week.id] = migrated;
 
           week.sections.forEach((section) => {
             const savedSection = savedWeek.details && savedWeek.details[section.title] ? savedWeek.details[section.title] : {};
@@ -623,6 +645,15 @@
         }).join("");
 
         const tr = document.createElement("tr");
+        // notes preview: show button to open modal and a small list of entries
+        const notesEntries = state.weeks[week.id].notesEntries || [];
+        // only show a button with count; content is not shown on the main table
+        const notesHtml = `
+          <div class="notes-preview">
+            <button class="open-notes-btn" data-week="${week.id}">备注 (${notesEntries.length})</button>
+          </div>
+        `;
+
         tr.innerHTML = `
           <td>
             <strong>${week.name}</strong><br>
@@ -645,7 +676,7 @@
           </td>
           <td><input type="date" value="${data.startDate}" data-type="week-start" data-id="${week.id}"></td>
           <td><input type="date" value="${data.endDate}" data-type="week-end" data-id="${week.id}"></td>
-          <td><textarea data-type="week-notes" data-id="${week.id}" placeholder="记录问题、收获、阻塞点...">${data.notes}</textarea></td>
+          <td>${notesHtml}</td>
         `;
         tbody.appendChild(tr);
       });
@@ -693,12 +724,52 @@
       try {
         const handle = await window.showDirectoryPicker({ mode: "readwrite" });
         progressDirHandle = handle;
+        // persist the handle to IndexedDB so it can be restored on next load
+        try { await saveDirHandleToDB(handle); } catch(e){ console.warn('saveDirHandleToDB failed', e); }
         updateStorageHint(`当前目录：${handle.name}。保存文件名：${DEFAULT_PROGRESS_FILE}`);
       } catch (error) {
         if (error && error.name !== "AbortError") {
           alert("选择目录失败。");
         }
       }
+    }
+
+    // Persist directory handle to IndexedDB so it can be restored across sessions
+    function saveDirHandleToDB(handle) {
+      return new Promise((resolve, reject) => {
+        try {
+          const req = indexedDB.open('ai_progress_handles', 1);
+          req.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains('handles')) db.createObjectStore('handles');
+          };
+          req.onsuccess = (e) => {
+            const db = e.target.result;
+            const tx = db.transaction('handles', 'readwrite');
+            tx.objectStore('handles').put(handle, 'progressDir');
+            tx.oncomplete = () => { db.close(); resolve(); };
+            tx.onerror = () => { db.close(); reject(tx.error); };
+          };
+          req.onerror = () => reject(req.error);
+        } catch (err) { reject(err); }
+      });
+    }
+
+    function getDirHandleFromDB() {
+      return new Promise((resolve, reject) => {
+        try {
+          const req = indexedDB.open('ai_progress_handles', 1);
+          req.onupgradeneeded = (e) => { e.target.result.createObjectStore('handles'); };
+          req.onsuccess = (e) => {
+            const db = e.target.result;
+            const tx = db.transaction('handles', 'readonly');
+            const getReq = tx.objectStore('handles').get('progressDir');
+            getReq.onsuccess = () => { db.close(); resolve(getReq.result); };
+            getReq.onerror = () => { db.close(); resolve(null); };
+          };
+          req.onerror = () => reject(req.error);
+        } catch (err) { reject(err); }
+      });
     }
 
     async function ensureProgressDirectory() {
@@ -720,6 +791,25 @@
         const writable = await fileHandle.createWritable();
         await writable.write(JSON.stringify(state, null, 2));
         await writable.close();
+        // also persist per-week notes to separate files under a 'note' subdirectory
+        try {
+          const noteDir = await dirHandle.getDirectoryHandle('note', { create: true });
+          for (const wk of Object.keys(state.weeks)) {
+            const entries = state.weeks[wk].notesEntries || [];
+            if (entries.length > 0) {
+              try {
+                const notesHandle = await noteDir.getFileHandle(`${wk}.json`, { create: true });
+                const w = await notesHandle.createWritable();
+                await w.write(JSON.stringify(entries, null, 2));
+                await w.close();
+              } catch (e) {
+                console.warn('写入备注文件失败', wk, e);
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('无法创建 note 子目录或写入备注文件', e);
+        }
         updateStats();
         updateStorageHint(`已保存到：${dirHandle.name}\\${DEFAULT_PROGRESS_FILE}`);
         if (showMessage) {
@@ -727,6 +817,35 @@
         }
       } catch (error) {
         alert("保存到文件失败，请确认已授予目录写权限。");
+      }
+    }
+
+    // write per-week notes file for a given week into chosen progress directory
+    async function writeNotesFileForWeek(weekId) {
+      if (!progressDirHandle) return;
+      try {
+        const entries = state.weeks[weekId].notesEntries || [];
+        const noteDir = await progressDirHandle.getDirectoryHandle('note', { create: true });
+        const handle = await noteDir.getFileHandle(`${weekId}.json`, { create: true });
+        const w = await handle.createWritable();
+        await w.write(JSON.stringify(entries, null, 2));
+        await w.close();
+        updateStorageHint(`已保存备注: ${handle.name}`);
+      } catch (e) {
+        console.warn('writeNotesFileForWeek error', e);
+      }
+    }
+
+    async function readNotesFileForWeek(weekId) {
+      if (!progressDirHandle) return null;
+      try {
+        const noteDir = await progressDirHandle.getDirectoryHandle('note');
+        const handle = await noteDir.getFileHandle(`${weekId}.json`);
+        const f = await handle.getFile();
+        const txt = await f.text();
+        return JSON.parse(txt);
+      } catch (e) {
+        return null;
       }
     }
 
@@ -818,6 +937,53 @@
         updateStats();
       });
 
+      // 打开备注 modal（事件委托）
+      document.body.addEventListener('click', (e) => {
+        const btn = e.target.closest && e.target.closest('.open-notes-btn');
+        if (btn) {
+          const weekId = btn.dataset.week;
+          // open modal (async)
+          openNotesModal(weekId);
+        }
+        // 删除备注项
+        const delBtn = e.target.closest && e.target.closest('.note-delete-btn');
+        if (delBtn) {
+          const weekId = delBtn.dataset.week;
+          const idx = Number(delBtn.dataset.index);
+          if (weekId != null && !Number.isNaN(idx)) {
+            state.weeks[weekId].notesEntries.splice(idx,1);
+            saveState();
+            // persist to file if directory chosen
+            (async () => { if (progressDirHandle) await writeNotesFileForWeek(weekId); })();
+            renderWeeks();
+            closeNotesModal();
+            // reopen to refresh list
+            openNotesModal(weekId);
+          }
+        }
+      });
+
+      // modal 按钮事件
+      document.getElementById('notesModalAdd').addEventListener('click', () => {
+        const weekId = document.getElementById('notesModal').dataset.week;
+        const ta = document.getElementById('notesModalTextarea');
+        const val = ta.value.trim();
+        if (!val) return;
+        state.weeks[weekId].notesEntries.push(val);
+        ta.value = '';
+        saveState();
+        renderWeeks();
+        // 重新渲染 modal 列表
+        populateNotesModal(weekId);
+      });
+
+      document.getElementById('notesModalClose').addEventListener('click', () => { closeNotesModal(); });
+
+      document.getElementById('notesModalSave').addEventListener('click', () => {
+        // just close (state already updated when adding/deleting)
+        closeNotesModal();
+      });
+
       document.getElementById("weeklySummary").addEventListener("input", (event) => {
         state.weeklySummary = event.target.value;
       });
@@ -856,7 +1022,76 @@
       bindEvents();
     }
 
+    // 创建备注 modal DOM（确保在绑定事件前存在）
+    (function createNotesModalDom(){
+      if (document.getElementById('notesModal')) return;
+      const backdrop = document.createElement('div');
+      backdrop.id = 'notesBackdrop';
+      backdrop.className = 'modal-backdrop';
+      const modal = document.createElement('div');
+      modal.id = 'notesModal';
+      modal.className = 'modal';
+      modal.innerHTML = `
+        <div class="modal-header">备注</div>
+        <div class="modal-body">
+          <div id="notesModalList"></div>
+          <div style="margin-top:12px;"><textarea id="notesModalTextarea" placeholder="在此输入新的备注并点击 添加"></textarea></div>
+        </div>
+        <div class="modal-actions">
+          <button id="notesModalAdd" class="primary">添加</button>
+          <button id="notesModalSave" class="primary">保存并关闭</button>
+          <button id="notesModalClose" class="secondary">关闭</button>
+        </div>
+      `;
+      document.body.appendChild(backdrop);
+      document.body.appendChild(modal);
+    })();
+
     init();
+
+    // 备注 modal 功能：弹窗、填充、关闭
+    async function openNotesModal(weekId) {
+      const backdrop = document.getElementById('notesBackdrop');
+      const modal = document.getElementById('notesModal');
+      modal.dataset.week = weekId;
+      // if a progress directory is chosen, try to read notes from file
+      if (progressDirHandle) {
+        const fileEntries = await readNotesFileForWeek(weekId);
+        if (Array.isArray(fileEntries)) {
+          // use file contents for display and state
+          state.weeks[weekId].notesEntries = fileEntries;
+        }
+      }
+      backdrop.style.display = 'block';
+      modal.style.display = 'block';
+      populateNotesModal(weekId);
+    }
+
+    function closeNotesModal() {
+      document.getElementById('notesBackdrop').style.display = 'none';
+      document.getElementById('notesModal').style.display = 'none';
+      // clear textarea
+      document.getElementById('notesModalTextarea').value = '';
+    }
+
+    function populateNotesModal(weekId) {
+      const list = document.getElementById('notesModalList');
+      list.innerHTML = '';
+      const entries = state.weeks[weekId].notesEntries || [];
+      entries.forEach((text, idx) => {
+        const li = document.createElement('div');
+        li.style.display = 'flex';
+        li.style.justifyContent = 'space-between';
+        li.style.alignItems = 'center';
+        li.style.padding = '6px 0';
+        li.innerHTML = `<div style="flex:1">${escapeHtml(text)}</div><button class="note-delete-btn secondary" data-week="${weekId}" data-index="${idx}">删除</button>`;
+        list.appendChild(li);
+      });
+    }
+
+    function escapeHtml(s) {
+      return (s+'').replace(/[&<>"']/g, function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[m];});
+    }
   </script>
 </body>
 </html>
