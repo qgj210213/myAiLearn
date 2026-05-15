@@ -11,12 +11,12 @@
       "details": {
         "Python 开发基础": {
           "掌握语法、数据结构、函数和类": true,
-          "能处理文件、JSON、异常": false,
-          "理解迭代器、生成器和上下文管理器": false
+          "能处理文件、JSON、异常": true,
+          "理解迭代器、生成器和上下文管理器": true
         },
         "环境与协作": {
-          "会创建 venv 并安装依赖": false,
-          "理解 requirements.txt 的作用": false,
+          "会创建 venv 并安装依赖": true,
+          "理解 requirements.txt 的作用": true,
           "会用 Git 做分支开发和提交": true
         },
         "HTTP 与 API": {
@@ -250,5 +250,5 @@
     }
   },
   "weeklySummary": "",
-  "lastSaved": "2026/5/13 18:40:01"
+  "lastSaved": "2026/5/15 18:07:15"
 }
