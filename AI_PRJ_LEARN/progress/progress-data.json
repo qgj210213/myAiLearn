@@ -2,12 +2,10 @@
   "weeks": {
     "week1": {
       "status": "not_started",
-      "startDate": "2026-05-08",
-      "endDate": "",
-      "notes": "基础知识继续学习",
-      "notesEntries": [
-        "异常掌握"
-      ],
+      "startDate": "2026-05-14",
+      "endDate": "2026-05-22",
+      "notes": "",
+      "notesEntries": [],
       "details": {
         "Python 开发基础": {
           "掌握语法、数据结构、函数和类": true,
@@ -20,14 +18,14 @@
           "会用 Git 做分支开发和提交": true
         },
         "HTTP 与 API": {
-          "理解 GET/POST 和常见状态码": false,
-          "会用 requests 调用接口": false,
-          "会解析和构造 JSON 数据": false
+          "理解 GET/POST 和常见状态码": true,
+          "会用 requests 调用接口": true,
+          "会解析和构造 JSON 数据": true
         },
         "服务与工程习惯": {
-          "用 FastAPI 或 Flask 写简单接口": false,
-          "会写基础测试和日志": false,
-          "README 中写清运行步骤": false
+          "用 FastAPI 或 Flask 写简单接口": true,
+          "会写基础测试和日志": true,
+          "README 中写清运行步骤": true
         }
       }
     },
@@ -250,5 +248,5 @@
     }
   },
   "weeklySummary": "",
-  "lastSaved": "2026/5/15 18:07:15"
+  "lastSaved": "2026/5/22 15:45:01"
 }
